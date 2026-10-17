@@ -189,6 +189,15 @@ function cmp(label, expected, actual, tol = null) {
   return { label, expected, actual, verdict: pass ? 'PASS' : 'FAIL', note: pass ? '' : 'mismatch' };
 }
 
+/** Parse a decimal token amount ("23669235.465921230581203552") to wei without float math. */
+export function decimalToWei(value, decimals = 18) {
+  const s = String(value).trim();
+  if (!/^\d+(\.\d+)?$/.test(s)) throw new Error(`invalid decimal amount: ${value}`);
+  const [whole, frac = ''] = s.split('.');
+  const padded = (frac + '0'.repeat(decimals)).slice(0, decimals);
+  return BigInt(whole) * 10n ** BigInt(decimals) + BigInt(padded || '0');
+}
+
 /**
  * Compare a receipt JSON against collected chain data.
  * Receipt schema: { date, tx, bnbIn, fjOut, impactPct, pool, treasury, token }
@@ -199,9 +208,9 @@ export function compareReceipt(receipt, chain) {
   if (receipt.block !== undefined) checks.push(cmp('block', receipt.block, chain.block));
   if (receipt.bnbIn !== undefined) checks.push(cmp('BNB in', Number(receipt.bnbIn), chain.bnbIn));
   if (receipt.fjOut !== undefined) {
-    // accept either wei string or human FJ number
+    // accept either the exact wei string or a decimal FLAPJAX amount
     const expected = String(receipt.fjOut).includes('.')
-      ? String(Math.round(Number(receipt.fjOut) * 1e18))
+      ? decimalToWei(receipt.fjOut).toString()
       : String(receipt.fjOut);
     checks.push(cmp('FJ out', expected, chain.fjOut));
   }

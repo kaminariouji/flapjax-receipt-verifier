@@ -78,6 +78,7 @@ async function main() {
     const samples = [
       ['receipts/2026-10-13.json', '0xc94de373d1fb00093431224a97475b3b2b48b9a4962d15acbe9d9c5c016d720c'],
       ['receipts/2026-10-14.json', '0x172349c64ed3c45663650049f9e2ad3d763b1243c5c849b7d66f144f221d3186'],
+      ['receipts/2026-10-16.json', '0xc999000f16f326e8868fe37f83871219be1a63f98043b0aef9ee57f469232156'],
     ];
     let code = 0;
     for (const [file, tx] of samples) {

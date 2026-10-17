@@ -99,6 +99,18 @@ Amounts, status and block never need an archive node.
 - Public RPC endpoints rate-limit. The tool retries across five endpoints and gives up cleanly rather than returning a wrong number.
 - It is read-only. There is no key, no signature, and no transaction.
 
+## Verified against
+
+`npm test` (or `node selftest.mjs`) asserts three real buybacks and their exact on-chain values:
+
+| Date | Block | BNB in | FLAPJAX out | slot0 impact |
+|---|---:|---:|---:|---:|
+| 2026-10-13 | 127452454 | 0.01 | 23,762,833.230024087278551319 | +0.3030% |
+| 2026-10-14 | 127643212 | 0.01 | 23,691,113.109537150143912753 | +0.3025% |
+| 2026-10-16 | 128086717 | 0.01 | 23,669,235.465921230581203552 | +0.3024% |
+
+The 2026-10-16 row is checked against the receipt as posted publicly, including the exact 18-decimal FLAPJAX amount — the tool parses decimals to wei with integer math, so a 23M-token amount does not drift.
+
 ## Files
 
 - `lib.mjs` — RPC, log decoding, slot0 math, comparison.

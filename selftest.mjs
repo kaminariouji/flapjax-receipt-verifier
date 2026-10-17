@@ -23,6 +23,13 @@ const CASES = [
     fjOut: '23691113109537150143912753',
     impactPct: 0.3025,
   },
+  {
+    file: 'receipts/2026-10-16.json',
+    tx: '0xc999000f16f326e8868fe37f83871219be1a63f98043b0aef9ee57f469232156',
+    block: 128086717,
+    fjOut: '23669235465921230581203552',
+    impactPct: 0.3024,
+  },
 ];
 
 let failures = 0;
