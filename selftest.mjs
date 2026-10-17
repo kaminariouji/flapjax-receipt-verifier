@@ -6,7 +6,13 @@
 //   BSC_ARCHIVE_RPC=... node selftest.mjs   # also checks slot0 impact
 
 import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
 import { collect, compareReceipt } from './lib.mjs';
+
+// Resolve fixtures against this file, not the caller's working directory, so
+// `node path/to/selftest.mjs` behaves the same as `cd repo && node selftest.mjs`.
+const HERE = dirname(fileURLToPath(import.meta.url));
 
 const CASES = [
   {
@@ -57,7 +63,7 @@ for (const c of CASES) {
     console.log('SKIP  slot0 impact — set BSC_ARCHIVE_RPC to check it');
   }
 
-  const receipt = JSON.parse(readFileSync(c.file, 'utf8'));
+  const receipt = JSON.parse(readFileSync(join(HERE, c.file), 'utf8'));
   const cmp = compareReceipt(receipt, chain);
   check('receipt comparison PASS', cmp.verdict === 'PASS', `${cmp.failed} failed field(s)`);
 
