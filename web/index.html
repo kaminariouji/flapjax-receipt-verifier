@@ -1,0 +1,262 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>FlapJax receipt verifier — check a buyback against BNB Chain</title>
+<style>
+  :root{
+    --bg:#0b0f17; --panel:#111827; --panel2:#0d1420; --line:#1f2a3a;
+    --text:#e6edf7; --muted:#8b98a9; --ok:#3ddc97; --bad:#ff6b6b; --skip:#f5c451; --accent:#7cc4ff;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font:15px/1.6 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+  main{max-width:860px;margin:0 auto;padding:40px 20px 80px}
+  h1{font-size:22px;margin:0 0 4px}
+  .sub{color:var(--muted);margin:0 0 28px}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:18px;margin-bottom:18px}
+  label{display:block;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px}
+  input,textarea{width:100%;background:var(--panel2);border:1px solid var(--line);border-radius:7px;color:var(--text);
+    font:inherit;padding:10px 12px;outline:none}
+  input:focus,textarea:focus{border-color:#2f4a6b}
+  textarea{min-height:110px;resize:vertical;font-size:13px}
+  .row{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  @media(max-width:640px){.row{grid-template-columns:1fr}}
+  .field{margin-bottom:14px}
+  button{background:var(--accent);color:#06111d;border:0;border-radius:7px;padding:11px 20px;
+    font:inherit;font-weight:700;cursor:pointer}
+  button:disabled{opacity:.55;cursor:progress}
+  .hint{color:var(--muted);font-size:12px;margin-top:8px}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{color:var(--muted);font-weight:500;font-size:11px;text-transform:uppercase;letter-spacing:.06em}
+  .v-PASS{color:var(--ok)} .v-FAIL{color:var(--bad)} .v-SKIP{color:var(--skip)}
+  .verdict{font-size:18px;font-weight:700;margin:0 0 12px}
+  .kv{display:grid;grid-template-columns:150px 1fr;gap:4px 14px;font-size:13px}
+  .kv div:nth-child(odd){color:var(--muted)}
+  code{background:var(--panel2);padding:1px 5px;border-radius:4px}
+  .err{color:var(--bad);white-space:pre-wrap;font-size:13px}
+  a{color:var(--accent)}
+  .foot{color:var(--muted);font-size:12px;margin-top:26px}
+</style>
+</head>
+<body>
+<main>
+  <h1>FlapJax receipt verifier</h1>
+  <p class="sub">Paste a buyback transaction. Every field is read from BNB Chain in your browser — no server, no key, no account.</p>
+
+  <div class="panel">
+    <div class="field">
+      <label for="tx">Transaction hash</label>
+      <input id="tx" spellcheck="false" value="0xc999000f16f326e8868fe37f83871219be1a63f98043b0aef9ee57f469232156" />
+      <div class="hint">Default: the 2026-10-16 buyback.</div>
+    </div>
+    <div class="field">
+      <label for="receipt">Posted receipt JSON (optional)</label>
+      <textarea id="receipt" spellcheck="false" placeholder='{"date":"2026-10-16","bnbIn":0.01,"fjOut":"23669235.465921230581203552","block":128086717}'></textarea>
+      <div class="hint">Any field present here is compared against the chain. Missing fields are reported as SKIP, never as PASS.</div>
+    </div>
+    <button id="go">Verify</button>
+    <div class="hint">Reads <code>eth_getTransactionReceipt</code> and decodes the FLAPJAX <code>Transfer</code> logs from the pool to the treasury.</div>
+  </div>
+
+  <div id="out"></div>
+
+  <p class="foot">
+    Pool <code>0xcA93EC…c2150</code> · Treasury <code>0x7C34E9…3359f</code> · Token <code>0x90c888…80df</code><br>
+    The same logic runs as a CLI in the repo. Public RPCs cannot read historical <code>slot0</code>; price impact is skipped in the browser and checked only with an archive node.
+  </p>
+</main>
+
+<script>
+const FJ       = '0x90c8889f428f9ebb77bb8f15cad3a50a9ac680df';
+const TREASURY = '0x7c34e9e21ee28a49ff0b84b61774119e6633359f';
+const POOL     = '0xca93ec685b8623688e6b236f9068034b298c2150';
+const TRANSFER = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef';
+
+const RPCS = [
+  'https://bsc-dataseed1.defibit.io',
+  'https://bsc-dataseed.binance.org',
+  'https://rpc.ankr.com/bsc',
+];
+
+let rpcId = 1;
+async function rpc(method, params) {
+  let last;
+  for (const url of RPCS) {
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ jsonrpc: '2.0', id: rpcId++, method, params }),
+      });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const json = await res.json();
+      if (json.error) throw new Error(json.error.message || 'rpc error');
+      if (json.result === undefined || json.result === null) throw new Error('empty result');
+      return json.result;
+    } catch (e) { last = e; }
+  }
+  throw new Error('all RPC endpoints failed: ' + (last && last.message));
+}
+
+const hex = (n) => '0x' + BigInt(n).toString(16);
+const lc  = (s) => String(s || '').toLowerCase();
+
+function formatUnits(wei, decimals = 18) {
+  const s = BigInt(wei).toString().padStart(decimals + 1, '0');
+  const whole = s.slice(0, s.length - decimals);
+  const frac = s.slice(s.length - decimals).replace(/0+$/, '');
+  return frac ? `${whole}.${frac}` : whole;
+}
+
+function decimalToWei(value, decimals = 18) {
+  const s = String(value).trim();
+  if (!/^\d+(\.\d+)?$/.test(s)) throw new Error('invalid decimal amount: ' + value);
+  const [whole, frac = ''] = s.split('.');
+  const padded = (frac + '0'.repeat(decimals)).slice(0, decimals);
+  return (BigInt(whole) * 10n ** BigInt(decimals) + BigInt(padded || '0')).toString();
+}
+
+function decodeTransfers(receipt) {
+  const out = [];
+  for (const log of receipt.logs || []) {
+    if (lc(log.address) !== FJ) continue;
+    if (lc(log.topics && log.topics[0]) !== TRANSFER) continue;
+    if (!log.topics[1] || !log.topics[2]) continue;
+    out.push({
+      from: '0x' + log.topics[1].slice(26),
+      to: '0x' + log.topics[2].slice(26),
+      value: BigInt(log.data).toString(),
+    });
+  }
+  return out;
+}
+
+function cmp(label, expected, actual, tol) {
+  if (expected === undefined || expected === null || expected === '') {
+    return { label, expected: '—', actual: String(actual), verdict: 'SKIP', note: 'not in receipt' };
+  }
+  if (actual === undefined || actual === null) {
+    return { label, expected: String(expected), actual: '—', verdict: 'FAIL', note: 'missing on chain' };
+  }
+  let pass;
+  if (tol && typeof expected === 'number' && typeof actual === 'number') {
+    const scale = Math.max(Math.abs(expected), 1e-12);
+    pass = Math.abs(actual - expected) / scale <= tol;
+  } else {
+    pass = lc(expected) === lc(actual);
+  }
+  return { label, expected: String(expected), actual: String(actual), verdict: pass ? 'PASS' : 'FAIL', note: pass ? '' : 'mismatch' };
+}
+
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+async function verify() {
+  const out = document.getElementById('out');
+  const btn = document.getElementById('go');
+  const tx = document.getElementById('tx').value.trim();
+  if (!/^0x[0-9a-fA-F]{64}$/.test(tx)) {
+    out.innerHTML = '<div class="panel err">That is not a 32-byte transaction hash.</div>';
+    return;
+  }
+  btn.disabled = true;
+  out.innerHTML = '<div class="panel">Reading BNB Chain…</div>';
+
+  try {
+    const [txData, receipt] = await Promise.all([
+      rpc('eth_getTransactionByHash', [tx]),
+      rpc('eth_getTransactionReceipt', [tx]),
+    ]);
+    if (!txData) throw new Error('transaction not found');
+    if (!receipt) throw new Error('receipt not found (still pending?)');
+
+    const block = Number(receipt.blockNumber);
+    const blockData = await rpc('eth_getBlockByNumber', [receipt.blockNumber, false]);
+    const transfers = decodeTransfers(receipt);
+    const valueWei = BigInt(txData.value || '0');
+
+    const fjOut = transfers
+      .filter((t) => lc(t.from) === POOL && lc(t.to) === TREASURY)
+      .reduce((a, t) => a + BigInt(t.value), 0n);
+
+    const chain = {
+      status: receipt.status === '0x1' ? 'success' : 'reverted',
+      block,
+      bnbIn: Number(valueWei) / 1e18,
+      fjOut: fjOut.toString(),
+    };
+
+    const raw = document.getElementById('receipt').value.trim();
+    let rows = [cmp('tx status', 'success', chain.status)];
+    if (raw) {
+      let posted;
+      try { posted = JSON.parse(raw); }
+      catch (e) { throw new Error('receipt JSON is not valid JSON: ' + e.message); }
+      if (posted.block !== undefined) rows.push(cmp('block', posted.block, chain.block));
+      if (posted.bnbIn !== undefined) rows.push(cmp('BNB in', Number(posted.bnbIn), chain.bnbIn));
+      if (posted.fjOut !== undefined) {
+        const expected = String(posted.fjOut).includes('.')
+          ? decimalToWei(posted.fjOut)
+          : String(posted.fjOut);
+        rows.push(cmp('FJ out', expected, chain.fjOut));
+      }
+      if (posted.impactPct !== undefined) {
+        rows.push({ label: 'slot0 impact %', expected: String(posted.impactPct), actual: '—', verdict: 'SKIP', note: 'needs archive node' });
+      }
+      if (posted.pool !== undefined) rows.push(cmp('pool', posted.pool, POOL));
+      if (posted.treasury !== undefined) rows.push(cmp('treasury', posted.treasury, TREASURY));
+    }
+
+    const failed = rows.filter((r) => r.verdict === 'FAIL').length;
+    const verdict = failed === 0 ? 'PASS' : 'FAIL';
+    const cls = verdict === 'PASS' ? 'v-PASS' : 'v-FAIL';
+
+    out.innerHTML = `
+      <div class="panel">
+        <p class="verdict ${cls}">VERDICT: ${verdict}${raw ? '' : ' (chain read only — no receipt pasted)'}</p>
+        <div class="kv">
+          <div>block</div><div>${block}</div>
+          <div>timestamp</div><div>${blockData ? new Date(Number(BigInt(blockData.timestamp)) * 1000).toISOString() : '—'}</div>
+          <div>status</div><div>${chain.status}</div>
+          <div>BNB in</div><div>${chain.bnbIn}</div>
+          <div>FJ out (wei)</div><div>${chain.fjOut}</div>
+          <div>FJ out</div><div>${formatUnits(chain.fjOut)}</div>
+          <div>from</div><div>${esc(txData.from)}</div>
+          <div>to</div><div>${esc(txData.to)}</div>
+        </div>
+      </div>
+      <div class="panel">
+        <table>
+          <thead><tr><th>field</th><th>receipt</th><th>chain</th><th>verdict</th><th>note</th></tr></thead>
+          <tbody>
+            ${rows.map((r) => `<tr>
+              <td>${esc(r.label)}</td>
+              <td>${esc(r.expected)}</td>
+              <td>${esc(r.actual)}</td>
+              <td class="v-${r.verdict}">${r.verdict}</td>
+              <td>${esc(r.note)}</td>
+            </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>
+      ${transfers.length ? `<div class="panel">
+        <table>
+          <thead><tr><th>FLAPJAX transfers in this tx</th><th>from</th><th>to</th><th>amount</th></tr></thead>
+          <tbody>${transfers.map((t, i) => `<tr>
+            <td>#${i + 1}</td><td>${esc(t.from)}</td><td>${esc(t.to)}</td><td>${formatUnits(t.value)}</td>
+          </tr>`).join('')}</tbody>
+        </table>
+      </div>` : ''}
+    `;
+  } catch (e) {
+    out.innerHTML = `<div class="panel err">${esc(e.message || e)}</div>`;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+document.getElementById('go').addEventListener('click', verify);
+</script>
+</body>
+</html>
