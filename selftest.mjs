@@ -60,6 +60,30 @@ for (const c of CASES) {
   const receipt = JSON.parse(readFileSync(c.file, 'utf8'));
   const cmp = compareReceipt(receipt, chain);
   check('receipt comparison PASS', cmp.verdict === 'PASS', `${cmp.failed} failed field(s)`);
+
+  // Tamper test: a receipt that is off by one wei must FAIL. A verifier that
+  // only ever says PASS is not a verifier.
+  const tampered = { ...receipt, fjOut: shiftLastDigit(receipt.fjOut, 1) };
+  const bad = compareReceipt(tampered, chain);
+  check('tampered receipt (last digit +1) FAILS', bad.verdict === 'FAIL', bad.verdict);
+}
+
+function shiftLastDigit(decimal, delta) {
+  const [whole, frac = ''] = String(decimal).split('.');
+  const digits = (whole + frac).split('');
+  let i = digits.length - 1;
+  while (i >= 0) {
+    const d = Number(digits[i]) + delta;
+    if (d >= 0 && d <= 9) {
+      digits[i] = String(d);
+      break;
+    }
+    digits[i] = d < 0 ? '9' : '0';
+    delta = d < 0 ? -1 : 1;
+    i--;
+  }
+  const s = digits.join('');
+  return frac ? `${s.slice(0, s.length - frac.length)}.${s.slice(s.length - frac.length)}` : s;
 }
 
 console.log(`\n${failures === 0 ? 'ALL CHECKS PASSED' : `${failures} CHECK(S) FAILED`}`);

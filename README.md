@@ -48,7 +48,12 @@ node verify.mjs --demo
 
 # assert the bundled samples against known values
 node selftest.mjs
+
+# verify every receipt in receipts/ and exit non-zero if any fails
+node verify-all.mjs
 ```
+
+`verify-all.mjs` is the unattended mode: no arguments, one line per receipt, deterministic exit code. The workflow in `.github/workflows/verify.yml` runs it on every push and once a day, so the result is visible without anyone running it by hand.
 
 Exit codes: `0` all checked fields pass, `1` at least one field fails, `2` error.
 
@@ -101,7 +106,7 @@ Amounts, status and block never need an archive node.
 
 ## Verified against
 
-`npm test` (or `node selftest.mjs`) asserts three real buybacks and their exact on-chain values:
+`npm test` (or `node selftest.mjs`) asserts three real buybacks and their exact on-chain values, and then tampers with each receipt by one wei to confirm the comparison actually fails:
 
 | Date | Block | BNB in | FLAPJAX out | slot0 impact |
 |---|---:|---:|---:|---:|
@@ -115,8 +120,10 @@ The 2026-10-16 row is checked against the receipt as posted publicly, including 
 
 - `lib.mjs` — RPC, log decoding, slot0 math, comparison.
 - `verify.mjs` — CLI.
-- `selftest.mjs` — asserts two audited buybacks (2026-10-13, 2026-10-14).
+- `verify-all.mjs` — verify every bundled receipt, non-zero exit on failure.
+- `selftest.mjs` — asserts three audited buybacks and that tampered receipts fail.
 - `receipts/` — sample receipts.
+- `.github/workflows/verify.yml` — runs both scripts on push and daily.
 
 ## License
 
