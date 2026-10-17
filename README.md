@@ -2,6 +2,8 @@
 
 A dependency-free CLI that checks a FlapJax buyback receipt against BNB Smart Chain, field by field, and prints `PASS` / `FAIL` for each one.
 
+**Browser version:** https://kaminariouji.github.io/flapjax-receipt-verifier/ — paste a transaction hash and an optional receipt; the page reads the chain directly from your browser. No server, no key, no install.
+
 FlapJax's rule is *if it costs something, show the receipt*. This tool is the other half of that rule: **if you show a receipt, anyone can re-check it**.
 
 ```text
@@ -123,6 +125,7 @@ The 2026-10-16 row is checked against the receipt as posted publicly, including 
 - `verify-all.mjs` — verify every bundled receipt, non-zero exit on failure.
 - `selftest.mjs` — asserts three audited buybacks and that tampered receipts fail.
 - `receipts/` — sample receipts.
+- `docs/index.html` — the browser verifier (GitHub Pages).
 - `.github/workflows/verify.yml` — runs both scripts on push and daily.
 
 ## License
